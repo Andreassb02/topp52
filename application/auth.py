@@ -1,4 +1,5 @@
 import functools
+import re 
 
 from flask import Blueprint
 from flask import flash
@@ -14,7 +15,13 @@ from werkzeug.security import generate_password_hash
 from application.db import get_db
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
+regex = '^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w{2,3}$'
 
+def check(email):  
+    if(re.search(regex,email)):  
+        return True 
+    else:  
+        return False
 
 def login_required(view):
     """View decorator that redirects anonymous users to the login page."""
@@ -51,27 +58,40 @@ def register():
     password for security.
     """
     if request.method == "POST":
+        email = request.form["email"]
         username = request.form["username"]
         password = request.form["password"]
+        password_verify = request.form["password_verify"]
         db = get_db()
         error = None
 
         if not username:
-            error = "Username is required."
+            error = "Brukernavn må fylles ut."
         elif not password:
-            error = "Password is required."
+            error = "Passord må fylles ut.."
+        elif not email:
+            error = "E-Post må fylles ut."
+        elif password != password_verify:
+            error = "Passordene er ikke like."
+        elif not check(email):
+            error = "Ugyldig E-Post addresse."
         elif (
             db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
             is not None
         ):
-            error = "User {0} is already registered.".format(username)
+            error = "Brukernavnet '{0}' er i bruk.".format(username)
+        elif (
+            db.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+            is not None
+        ):
+            error = "E-Posten '{0}' er i bruk.".format(email)
 
         if error is None:
             # the name is available, store it in the database and go to
             # the login page
             db.execute(
-                "INSERT INTO users (username, password) VALUES (?, ?)",
-                (username, generate_password_hash(password)),
+                "INSERT INTO users (username, password, email) VALUES (?, ?, ?)",
+                (username, generate_password_hash(password), email),
             )
             db.commit()
             return redirect(url_for("auth.login"))
